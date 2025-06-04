@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Massive City World</title>
+  <style>
+    body { background: #000; margin: 0; overflow: hidden; }
+    canvas { display: block; margin: 0 auto; background: #222; }
+  </style>
+</head>
+<body>
+<canvas id="game" width="800" height="500"></canvas>
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const w = canvas.width, h = canvas.height;
+
+// === World Settings ===
+const mapW = 512, mapH = 512;
+const map = Array.from({ length: mapH }, (_, y) =>
+  Array.from({ length: mapW }, (_, x) => (
+    (x === 0 || y === 0 || x === mapW - 1 || y === mapH - 1) ? 1 : 0
+  ))
+);
+
+// === War Tower with Rooms (7x7) ===
+const tower = [
+  [1,1,1,0,1,1,1],
+  [1,0,0,0,0,0,1],
+  [1,0,1,0,1,0,1],
+  [1,0,0,0,0,0,1],
+  [1,0,1,0,1,0,1],
+  [1,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1],
+];
+
+function insertTower(x, y) {
+  for (let j = 0; j < tower.length; j++) {
+    for (let i = 0; i < tower[0].length; i++) {
+      if (map[y + j] && map[y + j][x + i] !== undefined) {
+        map[y + j][x + i] = tower[j][i];
+      }
+    }
+  }
+}
+
+// === Generate 40 Cities ===
+const cities = 40;
+const citiesPerRow = 8;
+const citySpacing = 60;
+
+for (let i = 0; i < cities; i++) {
+  const row = Math.floor(i / citiesPerRow);
+  const col = i % citiesPerRow;
+  const cityX = 20 + col * citySpacing;
+  const cityY = 20 + row * citySpacing;
+
+  // Place multiple towers in city grid
+  for (let y = 0; y < 3; y++) {
+    for (let x = 0; x < 3; x++) {
+      insertTower(cityX + x * 10, cityY + y * 10);
+    }
+  }
+}
+
+// === Player State ===
+let posX = 25.5, posY = 25.5, dir = 0;
+
+// === Render Function ===
+function render() {
+  // Sky
+  const gradient = ctx.createLinearGradient(0, 0, 0, h / 2);
+  gradient.addColorStop(0, "#87CEEB");
+  gradient.addColorStop(1, "#B0D0E0");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, w, h / 2);
+
+  // Ground
+  ctx.fillStyle = "#333";
+  ctx.fillRect(0, h / 2, w, h / 2);
+
+  for (let x = 0; x < w; x++) {
+    const cameraX = 2 * x / w - 1;
+    const rayDir = dir + cameraX * Math.PI / 4;
+    let rayX = Math.cos(rayDir), rayY = Math.sin(rayDir);
+    let mapX = Math.floor(posX), mapY = Math.floor(posY);
+    let sideDistX, sideDistY;
+    const deltaDistX = Math.abs(1 / rayX);
+    const deltaDistY = Math.abs(1 / rayY);
+    let stepX, stepY;
+    let hit = 0, side;
+
+    if (rayX < 0) { stepX = -1; sideDistX = (posX - mapX) * deltaDistX; }
+    else { stepX = 1; sideDistX = (mapX + 1.0 - posX) * deltaDistX; }
+    if (rayY < 0) { stepY = -1; sideDistY = (posY - mapY) * deltaDistY; }
+    else { stepY = 1; sideDistY = (mapY + 1.0 - posY) * deltaDistY; }
+
+    while (!hit) {
+      if (sideDistX < sideDistY) {
+        sideDistX += deltaDistX; mapX += stepX; side = 0;
+      } else {
+        sideDistY += deltaDistY; mapY += stepY; side = 1;
+      }
+      if (map[mapY] && map[mapY][mapX] > 0) hit = 1;
+    }
+
+    const perpWallDist = side === 0
+      ? (mapX - posX + (1 - stepX) / 2) / rayX
+      : (mapY - posY + (1 - stepY) / 2) / rayY;
+
+    const lineHeight = Math.floor(h / perpWallDist);
+    const drawStart = Math.max(0, -lineHeight / 2 + h / 2);
+    const drawEnd = Math.min(h, lineHeight / 2 + h / 2);
+    ctx.strokeStyle = side ? "#888" : "#fff";
+    ctx.beginPath(); ctx.moveTo(x, drawStart); ctx.lineTo(x, drawEnd); ctx.stroke();
+  }
+}
+
+// === Movement ===
+function move(forward, turn) {
+  dir += turn;
+  const moveX = Math.cos(dir) * forward;
+  const moveY = Math.sin(dir) * forward;
+  if (map[Math.floor(posY)][Math.floor(posX + moveX)] === 0) posX += moveX;
+  if (map[Math.floor(posY + moveY)][Math.floor(posX)] === 0) posY += moveY;
+}
+
+// === Controls ===
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp') move(0.1, 0);
+  if (e.key === 'ArrowDown') move(-0.1, 0);
+  if (e.key === 'ArrowLeft') move(0, -0.1);
+  if (e.key === 'ArrowRight') move(0, 0.1);
+});
+
+// === Main Loop ===
+function loop() {
+  render();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
